@@ -11,6 +11,7 @@ from .context_preflight import load_config
 from .events import append_harness_event
 from .hub_agents import hub_agent_name_for_role, sector_for_event
 from .jev_observer import observe
+from .jev_trigger import should_observe
 from .paths import config_path, relative_to_root, telegram_root, to_posix
 from .run_state import find_unevaluated_runs
 from .sensor_evidence import refresh_sensor_mirror
@@ -138,9 +139,14 @@ def append_and_maybe_notify_event(
     event = append_harness_event(root, event_type, payload, run_dir=run_dir)
     sync_agent_from_event(root, event)
     if event_type == "sensors_completed":
-        observation = observe(root, run_dir)
-        if observation.get("status") == "observed":
-            print(f"Jev (somente observação): {observation['recommendation']}", file=sys.stderr)
+        try:
+            if should_observe(load_config(root), payload):
+                observation = observe(root, run_dir)
+                if observation.get("status") == "observed":
+                    print(f"Jev (somente observação): {observation['recommendation']}", file=sys.stderr)
+        except (Exception, SystemExit):
+            # Optional advice cannot fail the sensor command or leak SDK errors.
+            print("JEV indisponível; os resultados dos sensores foram preservados.", file=sys.stderr)
     try:
         config = load_config(root)
         tconfig = telegram_config(config)

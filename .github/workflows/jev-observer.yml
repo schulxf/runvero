@@ -1,0 +1,29 @@
+name: jev-observer
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  bridge:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Offline protocol tests (no API key)
+        run: node --test integrations/jev-worker/worker.test.mjs
+      - name: Install optional SDK without lifecycle scripts
+        working-directory: integrations/jev-worker
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Verify SDK export without contacting a model
+        working-directory: integrations/jev-worker
+        run: node --input-type=module -e "import {experimental_evaluate as evaluate} from 'ai'; if (typeof evaluate !== 'function') throw new Error('Unsupported evaluation SDK');"

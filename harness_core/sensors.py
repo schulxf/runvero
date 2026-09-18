@@ -10,6 +10,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from harness_core.sensor_evidence import resolve_sensor_evidence
 from harness_core.storage import read_json
 
 SENSOR_TIERS = ["smoke", "affected", "full"]
@@ -150,14 +151,4 @@ def fastest_available_sensor_tier(contract: dict[str, Any]) -> str:
 
 
 def final_sensor_payload(run_dir: Path, contract: dict[str, Any]) -> dict[str, Any]:
-    tiers = normalize_sensor_tiers(contract)
-    if tiers["full"]:
-        for filename in ["sensors-full.json", "sensors-all.json", "sensors.json"]:
-            path = run_dir / filename
-            if not path.exists():
-                continue
-            payload = read_json(path, {})
-            if payload.get("tier") in {"full", "all"}:
-                return payload
-        return {}
-    return read_json(run_dir / "sensors.json", {})
+    return resolve_sensor_evidence(run_dir, contract)

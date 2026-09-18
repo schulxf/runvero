@@ -10,8 +10,10 @@ from .config import config_bool, telegram_config
 from .context_preflight import load_config
 from .events import append_harness_event
 from .hub_agents import hub_agent_name_for_role, sector_for_event
+from .jev_observer import observe
 from .paths import config_path, relative_to_root, telegram_root, to_posix
 from .run_state import find_unevaluated_runs
+from .sensor_evidence import refresh_sensor_mirror
 from .storage import append_jsonl
 from .task_store import find_task
 from .telegram import telegram_send_message
@@ -131,8 +133,14 @@ def append_and_maybe_notify_event(
     event_type: str,
     payload: dict[str, Any],
 ) -> None:
+    if event_type == "sensors_completed":
+        refresh_sensor_mirror(root, run_dir)
     event = append_harness_event(root, event_type, payload, run_dir=run_dir)
     sync_agent_from_event(root, event)
+    if event_type == "sensors_completed":
+        observation = observe(root, run_dir)
+        if observation.get("status") == "observed":
+            print(f"Jev (somente observação): {observation['recommendation']}", file=sys.stderr)
     try:
         config = load_config(root)
         tconfig = telegram_config(config)

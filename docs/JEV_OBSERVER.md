@@ -1,8 +1,8 @@
 # JEV: observador de falhas, sem autonomia
 
-Esta primeira entrega integra o JEV pelo Vercel AI Gateway para sugerir quando
-investigar repetição de falhas ou problemas de ambiente. O Codex continua
-implementando. O Harness continua controlando contratos, sensores e aprovações.
+A integração usa o JEV pelo Vercel AI Gateway para sugerir quando investigar
+repetição de falhas ou problemas de ambiente. O agente continua implementando.
+O Runvero continua controlando contratos, sensores e aprovações.
 
 **Desativado por padrão. Somente modo `shadow`. Não aprova, pausa, retoma,
 reinicia, instala, executa diagnósticos, escolhe modelos nem publica nada.**
@@ -23,12 +23,15 @@ apenas evidência preliminar: continuam visíveis no espelho, mas o resolvedor
 final não os aceita. Os gates existentes de revisão, plano de comandos e hash
 da superfície testada continuam obrigatórios e não dependem do JEV.
 
-O observador é chamado ao concluir uma invocação de sensores, antes do retorno
-do comando. Não monitora cada ferramenta interna do Codex nem interrompe o
-agente. Checkpoints da mesma task/run fornecem histórico; execuções rápidas
-no mesmo segundo podem sobrescrever checkpoints no formato atual do Harness.
-O observador deduplica registros iguais e nunca deve tratar duplicatas como
-prova de repetição.
+Após consentimento explícito, o gatilho automático padrão é uma invocação de
+sensores que **falhou**. Resultados bem-sucedidos não coletam o estado do JEV,
+não iniciam Node nem fazem chamadas ao provedor. Nas falhas elegíveis, a
+observação continua síncrona, antes do retorno do comando, com os limites de
+timeout, intervalo e orçamento existentes. Não monitora cada ferramenta interna
+do Codex nem interrompe o agente. Checkpoints da mesma task/run fornecem histórico;
+execuções rápidas no mesmo segundo podem sobrescrever checkpoints no formato
+atual do Harness. O observador deduplica registros iguais e nunca deve tratar
+duplicatas como prova de repetição.
 
 As perguntas versionadas verificam possível repetição, possível bloqueio de
 ambiente e insuficiência de evidência. As respostas são probabilidades booleanas,
@@ -37,13 +40,13 @@ um sinal fraco como confirmação de que o trabalho está correto.
 
 ## Instalação opcional
 
-Execute a partir de um checkout do Harness. O núcleo continua sem dependências
+Execute a partir de um checkout do Runvero. O núcleo continua sem dependências
 Python adicionais. Node.js 22+ e o SDK são necessários somente para chamadas
-reais ao JEV. Esta entrega usa um processo Node curto por observação; não é um
+reais ao JEV. A integração usa um processo Node curto por observação; não é um
 serviço residente nem uma medição da latência de inferência isolada.
 
 ```powershell
-cd C:\caminho\harness-schulx
+cd C:\caminho\runvero
 npm install --prefix integrations/jev-worker --ignore-scripts --no-audit --no-fund
 $env:AI_GATEWAY_API_KEY = "SUA_CHAVE_DO_GATEWAY"
 ```
@@ -64,6 +67,7 @@ JSON verdadeiros; strings como `"true"` não ativam a integração.
     "enabled": true,
     "mode": "shadow",
     "allow_remote_state": true,
+    "automatic_trigger": "failures",
     "timeout_seconds": 8,
     "min_interval_seconds": 15,
     "max_calls_per_run": 20,
@@ -71,6 +75,13 @@ JSON verdadeiros; strings como `"true"` não ativam a integração.
   }
 }
 ```
+
+`automatic_trigger` pode ser `failures` (padrão), `manual` (sem chamadas
+automáticas) ou `always` (todo resultado booleano de sensores). Para manter o
+comportamento anterior de observar também os testes bem-sucedidos, configure
+`always` explicitamente. Valores inválidos não acionam a API. Essa política é
+compartilhada pelos comandos legados e pelo [fluxo enxuto](LEAN_WORKFLOW.md).
+As ações manuais `preview`, `observe` e `status` não mudam por causa do gatilho.
 
 Para desativar, remova a seção ou defina `enabled` como `false`. Nenhuma task muda
 de status por isso. Sem Node, SDK, chave ou conectividade, a observação fica
@@ -96,8 +107,9 @@ python -m harness_core.jev_observer --repo C:\projetos\app --task TASK-001 --act
 `--run NOME_DA_RUN` seleciona uma execução específica. Sem isso, usa a última
 pasta de execução. O comando manual retorna código 2 para resultado indisponível
 ou desatualizado. O callback automático não transforma isso em falha da task.
-Após a ativação, os comandos normais `sensors`, `quick-pass` e `full-pass`
-aproveitam o mesmo callback. A recomendação disponível aparece no terminal.
+Após a ativação, os comandos legados `sensors`, `quick-pass` e `full-pass`, assim
+como `check` e `verify` do fluxo enxuto, aproveitam o mesmo callback e o gatilho
+configurado. A recomendação disponível aparece no terminal.
 
 ## Dados, privacidade e rastreabilidade
 
@@ -147,14 +159,16 @@ criptograficamente protegido contra um usuário com acesso de escrita ao projeto
 ## Validação e limites da entrega
 
 ```powershell
-python -m pytest tests/test_jev_observer.py -q
+python -m pytest tests/test_jev_observer.py tests/test_lean_workflow.py -q
 node --test integrations/jev-worker/worker.test.mjs
 ```
 
 Testes usam um provedor simulado e não consomem API. Cobrem consentimento,
 identidade de respostas, estado desatualizado, dados inválidos, segredos, timeout,
 orçamento, concorrência, compatibilidade de evidências e preservação do estado
-da task. Eles validam a integração e as regras, **não a acurácia do JEV**.
+da task. Os testes do fluxo enxuto também cobrem o gatilho automático e a
+preservação dos resultados quando o observador fica indisponível. Eles validam
+a integração e as regras, **não a acurácia do JEV**.
 
 Esta entrega não inclui roteamento de modelos, seleção semântica de memória,
 triagem de diff, execução automática de diagnósticos nem integração com
